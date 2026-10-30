@@ -446,6 +446,49 @@ a {
   animation: fadeIn 0.2s ease;
 }
 
+.link-security-notice {
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 12px;
+  max-width: 560px;
+  margin: 30px auto 0;
+  padding: 16px 20px;
+  border: 1px solid var(--border-light);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.72);
+  color: var(--text-2);
+}
+
+.link-security-icon {
+  flex: 0 0 auto;
+  margin-top: 1px;
+  color: var(--text-3);
+}
+
+.link-security-copy {
+  text-align: left;
+}
+
+.link-security-copy h2 {
+  margin-bottom: 3px;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.link-security-copy p {
+  color: var(--text-2);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.link-security-copy .link-security-attribution {
+  margin-top: 4px;
+  color: var(--text-3);
+  font-weight: 600;
+}
+
 /* ===== RESULT CARD ===== */
 
 .result-card {

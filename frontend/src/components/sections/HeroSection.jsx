@@ -187,6 +187,32 @@ export default function HeroSection() {
           onCreateAnother={handleCreateAnother}
         />
       )}
+
+      <aside className="link-security-notice" aria-labelledby="link-security-title">
+        <svg
+          className="link-security-icon"
+          width="20"
+          height="20"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.7"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden="true"
+        >
+          <path d="M12 22s8-4 8-11V5l-8-3-8 3v6c0 7 8 11 8 11Z" />
+          <path d="m9 12 2 2 4-4" />
+        </svg>
+        <div className="link-security-copy">
+          <h2 id="link-security-title">Link Security</h2>
+          <p>
+            To help prevent malicious links, URLs submitted for shortening may be checked using Google Safe Browsing.
+            The submitted URL is shared with Google for security screening.
+          </p>
+          <p className="link-security-attribution">Powered by Google Safe Browsing.</p>
+        </div>
+      </aside>
     </section>
   );
 }
