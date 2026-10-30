@@ -6,6 +6,7 @@ import com.vipul.urlshortener.dto.UrlResponse;
 import com.vipul.urlshortener.entity.UrlMapping;
 import com.vipul.urlshortener.exception.InvalidExpiryException;
 import com.vipul.urlshortener.exception.LinkExpiredException;
+import com.vipul.urlshortener.exception.ThreatLookupUnavailableException;
 import com.vipul.urlshortener.service.UrlServiceImpl;
 import com.vipul.urlshortener.util.ExpiryUtil;
 import org.springframework.http.HttpStatus;
@@ -67,6 +68,14 @@ public class UrlController {
                     .body(new ErrorResponse(
                             "INVALID_EXPIRY",
                             e.getMessage()
+                    ));
+
+        } catch (ThreatLookupUnavailableException e) {
+            return ResponseEntity
+                    .status(HttpStatus.SERVICE_UNAVAILABLE)
+                    .body(new ErrorResponse(
+                            "URL_SAFETY_UNAVAILABLE",
+                            "URL safety screening is temporarily unavailable"
                     ));
 
         } catch (IllegalArgumentException e) {

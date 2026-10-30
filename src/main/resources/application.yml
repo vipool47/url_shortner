@@ -1,0 +1,10 @@
+bitshort:
+  url-safety:
+    enabled: ${BITSHORT_URL_SAFETY_ENABLED:true}
+    fail-closed: ${BITSHORT_URL_SAFETY_FAIL_CLOSED:true}
+    max-url-length: ${BITSHORT_MAX_URL_LENGTH:8192}
+    public-short-link-hostname: ${BITSHORT_SHORT_LINK_HOSTNAME:}
+    safe-browsing:
+      api-key: ${SAFE_BROWSING_API_KEY:}
+      connect-timeout: ${SAFE_BROWSING_CONNECT_TIMEOUT:2s}
+      response-timeout: ${SAFE_BROWSING_RESPONSE_TIMEOUT:4s}

@@ -38,5 +38,6 @@ application.properties
 frontend/dist/
 target/
 .idea/
+SAFE-URL-FLOW.md
 
 
