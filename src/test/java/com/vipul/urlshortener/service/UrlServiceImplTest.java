@@ -1,13 +1,23 @@
 package com.vipul.urlshortener.service;
 
+import com.vipul.urlshortener.config.UrlSafetyProperties;
 import com.vipul.urlshortener.entity.UrlMapping;
 import com.vipul.urlshortener.exception.InvalidExpiryException;
 import com.vipul.urlshortener.exception.LinkExpiredException;
+import com.vipul.urlshortener.exception.ThreatLookupUnavailableException;
+import com.vipul.urlshortener.exception.UnsafeDestinationException;
 import com.vipul.urlshortener.repository.UrlMappingRepository;
+import com.vipul.urlshortener.util.UrlSafetyValidator;
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.springframework.transaction.annotation.Transactional;
+import org.slf4j.LoggerFactory;
 import org.mockito.ArgumentCaptor;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.SimpleTransactionStatus;
 
 import java.lang.reflect.Method;
 import java.time.LocalDateTime;
@@ -23,11 +33,25 @@ class UrlServiceImplTest {
 
     private UrlMappingRepository repository;
     private UrlServiceImpl service;
+    private UrlThreatChecker threatChecker;
+    private UrlSafetyProperties properties;
+    private PlatformTransactionManager transactionManager;
 
     @BeforeEach
     void setUp() {
         repository = mock(UrlMappingRepository.class);
-        service = new UrlServiceImpl(repository);
+        properties = new UrlSafetyProperties();
+        threatChecker = mock(UrlThreatChecker.class);
+        transactionManager = mock(PlatformTransactionManager.class);
+        when(transactionManager.getTransaction(any()))
+                .thenAnswer(invocation -> new SimpleTransactionStatus());
+        service = new UrlServiceImpl(
+                repository,
+                new UrlSafetyValidator(properties),
+                threatChecker,
+                properties,
+                transactionManager
+        );
         AtomicLong idGenerator = new AtomicLong(1);
         when(repository.save(any(UrlMapping.class))).thenAnswer(invocation -> {
             UrlMapping mapping = invocation.getArgument(0);
@@ -47,6 +71,7 @@ class UrlServiceImplTest {
         assertNotNull(code);
         assertFalse(code.isEmpty());
         verify(repository, atLeast(2)).save(any(UrlMapping.class));
+        verify(threatChecker).check("https://example.com");
     }
 
     @Test
@@ -110,6 +135,7 @@ class UrlServiceImplTest {
         assertThrows(IllegalArgumentException.class,
                 () -> service.shortenUrl("   ", null, null, null, null, null));
         verify(repository, never()).save(any(UrlMapping.class));
+        verifyNoInteractions(threatChecker);
     }
 
     @Test
@@ -117,6 +143,7 @@ class UrlServiceImplTest {
         assertThrows(IllegalArgumentException.class,
                 () -> service.shortenUrl("http://exa mple.com", null, null, null, null, null));
         verify(repository, never()).save(any(UrlMapping.class));
+        verifyNoInteractions(threatChecker);
     }
 
     @Test
@@ -147,10 +174,10 @@ class UrlServiceImplTest {
     }
 
     @Test
-    void shortenUrlIsTransactional() throws Exception {
+    void shortenUrlIsNotTransactional() throws Exception {
         Method method = UrlServiceImpl.class.getMethod(
                 "shortenUrl", String.class, String.class, Integer.class, Integer.class, Integer.class, String.class);
-        assertNotNull(method.getAnnotation(Transactional.class), "shortenUrl should be @Transactional");
+        assertNull(method.getAnnotation(org.springframework.transaction.annotation.Transactional.class));
     }
 
     @Test
@@ -166,6 +193,18 @@ class UrlServiceImplTest {
         assertEquals("spring", saved.getShortCode());
         assertEquals("https://spring.io", saved.getLongUrl());
         assertNull(saved.getExpiresAt());
+    }
+
+    @Test
+    void concurrentCustomAliasConflictGetsReadableError() {
+        when(repository.findByShortCode("taken")).thenReturn(Optional.empty());
+        doThrow(new DataIntegrityViolationException("unique constraint"))
+                .when(repository).save(any(UrlMapping.class));
+
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
+                () -> service.shortenUrl("https://example.com", "taken", null, null, null, null));
+
+        assertEquals("Custom alias already exists", exception.getMessage());
     }
 
     @Test
@@ -233,5 +272,64 @@ class UrlServiceImplTest {
         verify(repository, atLeastOnce()).save(captor.capture());
         UrlMapping firstSave = captor.getAllValues().get(0);
         assertNull(firstSave.getExpiresAt());
+    }
+
+    @Test
+    void threatLookupFailureFailsClosedBeforePersistence() {
+        doThrow(new ThreatLookupUnavailableException()).when(threatChecker).check("https://example.com");
+
+        assertThrows(ThreatLookupUnavailableException.class,
+                () -> service.shortenUrl("https://example.com", null, null, null, null, null));
+
+        verify(repository, never()).save(any(UrlMapping.class));
+    }
+
+    @Test
+    void confirmedThreatIsRejectedBeforePersistence() {
+        doThrow(new UnsafeDestinationException()).when(threatChecker).check("https://bad.example");
+
+        assertThrows(UnsafeDestinationException.class,
+                () -> service.shortenUrl("https://bad.example", "custom", null, null, null, null));
+
+        verify(repository, never()).save(any(UrlMapping.class));
+    }
+
+    @Test
+    void explicitFailOpenAllowsCreationAfterLookupFailure() {
+        properties.setFailClosed(false);
+        String sensitiveUrl = "https://example.com/path?token=private-value";
+        doThrow(new ThreatLookupUnavailableException()).when(threatChecker).check(sensitiveUrl);
+        when(repository.findAllByLongUrl(sensitiveUrl)).thenReturn(List.of());
+
+        assertNotNull(service.shortenUrl(sensitiveUrl, null, null, null, null, null));
+
+        verify(repository, atLeastOnce()).save(any(UrlMapping.class));
+    }
+
+    @Test
+    void failOpenWarningDoesNotLogTheDestinationOrApiKey() {
+        properties.setFailClosed(false);
+        properties.getSafeBrowsing().setApiKey("test-api-key");
+        String sensitiveUrl = "https://example.com/path?token=private-value";
+        doThrow(new ThreatLookupUnavailableException()).when(threatChecker).check(sensitiveUrl);
+        when(repository.findAllByLongUrl(sensitiveUrl)).thenReturn(List.of());
+        Logger logger = (Logger) LoggerFactory.getLogger(UrlServiceImpl.class);
+        ListAppender<ILoggingEvent> appender = new ListAppender<>();
+        appender.start();
+        logger.addAppender(appender);
+
+        try {
+            service.shortenUrl(sensitiveUrl, null, null, null, null, null);
+        } finally {
+            logger.detachAppender(appender);
+            appender.stop();
+        }
+
+        String messages = appender.list.stream()
+                .map(ILoggingEvent::getFormattedMessage)
+                .reduce("", (left, right) -> left + right);
+        assertFalse(messages.contains(sensitiveUrl));
+        assertFalse(messages.contains("test-api-key"));
+        assertTrue(messages.contains("fail-open is configured"));
     }
 }

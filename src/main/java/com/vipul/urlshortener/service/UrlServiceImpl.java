@@ -1,35 +1,53 @@
 package com.vipul.urlshortener.service;
 
+import com.vipul.urlshortener.config.UrlSafetyProperties;
 import com.vipul.urlshortener.entity.UrlMapping;
 import com.vipul.urlshortener.exception.InvalidExpiryException;
 import com.vipul.urlshortener.exception.LinkExpiredException;
+import com.vipul.urlshortener.exception.ThreatLookupUnavailableException;
 import com.vipul.urlshortener.repository.UrlMappingRepository;
 import com.vipul.urlshortener.util.Base62Encoder;
 import com.vipul.urlshortener.util.ExpiryUtil;
+import com.vipul.urlshortener.util.UrlSafetyValidator;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.net.URI;
-import java.net.URISyntaxException;
 import java.time.LocalDateTime;
-import java.util.List;
 import java.util.Optional;
 
 @Service
 public class UrlServiceImpl {
 
+    private static final Logger logger = LoggerFactory.getLogger(UrlServiceImpl.class);
     private final UrlMappingRepository repository;
+    private final UrlSafetyValidator urlSafetyValidator;
+    private final UrlThreatChecker urlThreatChecker;
+    private final UrlSafetyProperties urlSafetyProperties;
+    private final TransactionTemplate txTemplate;
 
-    public UrlServiceImpl(UrlMappingRepository repository) {
+    public UrlServiceImpl(
+            UrlMappingRepository repository,
+            UrlSafetyValidator urlSafetyValidator,
+            UrlThreatChecker urlThreatChecker,
+            UrlSafetyProperties urlSafetyProperties,
+            PlatformTransactionManager transactionManager
+    ) {
         this.repository = repository;
+        this.urlSafetyValidator = urlSafetyValidator;
+        this.urlThreatChecker = urlThreatChecker;
+        this.urlSafetyProperties = urlSafetyProperties;
+        this.txTemplate = new TransactionTemplate(transactionManager);
     }
 
     // Shorten URL with optional custom code and expiry
-    @Transactional
     public String shortenUrl(String longUrl, String customCode, Integer expiryTimeMinutes, Integer expiryTimeHours, Integer expiryTimeDays, String expiresAtTimestamp) {
-
-        // Validate URL
-        validateLongUrl(longUrl);
+        String url = longUrl == null ? null : longUrl.trim();
+        urlSafetyValidator.validate(url);
 
         // Calculate expiry time if provided
         LocalDateTime expiresAt;
@@ -39,79 +57,68 @@ public class UrlServiceImpl {
             throw new InvalidExpiryException(e.getMessage());
         }
 
-        String trimmedUrl = longUrl.trim();
+        String alias = validateAlias(customCode);
+        checkThreat(url);
 
-        // If custom code is provided, validate it
-        if (customCode != null && !customCode.trim().isEmpty()) {
-            customCode = customCode.trim().toLowerCase();
-
-            // Validate custom code format (alphanumeric only)
-            if (!customCode.matches("^[a-z0-9]+$")) {
-                throw new IllegalArgumentException("Custom alias must contain only lowercase letters and numbers");
-            }
-
-            // Check if custom code already exists
-            if (repository.findByShortCode(customCode).isPresent()) {
-                throw new IllegalArgumentException("Custom alias already exists");
-            }
-
-            // Save with custom code (allow same URL with different aliases)
-            UrlMapping mapping = new UrlMapping(trimmedUrl);
-            mapping.setShortCode(customCode);
-            mapping.setExpiresAt(expiresAt);
-            repository.save(mapping);
-            return customCode;
-        } else {
-            // Auto-generate short code
-            // Reuse an existing non-expired mapping for the same URL (avoid duplicates with auto-generated codes)
-            Optional<UrlMapping> existing = repository.findAllByLongUrl(trimmedUrl).stream()
-                    .filter(mapping -> !mapping.isExpired())
-                    .findFirst();
-            if (existing.isPresent()) {
-                return existing.get().getShortCode();
-            }
-
-            // Save to get ID
-            UrlMapping mapping = new UrlMapping(trimmedUrl);
-            mapping.setExpiresAt(expiresAt);
-            mapping = repository.save(mapping);
-
-            // Generate short code from ID
-            String shortCode = Base62Encoder.encode(mapping.getId());
-
-            // Update entity with generated code
-            mapping.setShortCode(shortCode);
-            repository.save(mapping);
-
-            return shortCode;
-        }
-    }
-
-    private void validateLongUrl(String longUrl) {
-        if (longUrl == null || longUrl.trim().isEmpty()) {
-            throw new IllegalArgumentException("URL cannot be empty");
-        }
-
-        String url = longUrl.trim();
-
-        URI uri;
         try {
-            uri = new URI(url);
-        } catch (URISyntaxException e) {
-            throw new IllegalArgumentException("Invalid URL format");
+            return txTemplate.execute(status -> persist(url, alias, expiresAt));
+        } catch (DataIntegrityViolationException e) {
+        if (alias != null) {
+            throw new IllegalArgumentException("Custom alias already exists");
+        }
+        throw e;   // not an alias problem, server error
+    }
+    }
+
+    private String validateAlias(String customCode) {
+        if (customCode == null || customCode.trim().isEmpty()) {
+            return null;
         }
 
-        String scheme = uri.getScheme();
-        if (scheme == null || !(scheme.equalsIgnoreCase("http") || scheme.equalsIgnoreCase("https"))) {
-            throw new IllegalArgumentException("Only HTTP/HTTPS URLs are supported");
+        String alias = customCode.trim().toLowerCase();
+        if (!alias.matches("^[a-z0-9]+$")) {
+            throw new IllegalArgumentException("Custom alias must contain only lowercase letters and numbers");
         }
+        if (repository.findByShortCode(alias).isPresent()) {
+            throw new IllegalArgumentException("Custom alias already exists");
+        }
+        return alias;
+    }
 
-        String host = uri.getHost();
-        if (host == null || host.isBlank()) {
-            throw new IllegalArgumentException("Invalid URL format");
+    private void checkThreat(String url) {
+        try {
+            urlThreatChecker.check(url);
+        } catch (ThreatLookupUnavailableException e) {
+            if (urlSafetyProperties.isFailClosed()) {
+                throw e;
+            }
+            logger.warn("Threat lookup failed; continuing URL creation because fail-open is configured");
         }
     }
 
+    private String persist(String url, String alias, LocalDateTime expiresAt) {
+        if (alias != null) {
+            UrlMapping mapping = new UrlMapping(url);
+            mapping.setShortCode(alias);
+            mapping.setExpiresAt(expiresAt);
+            repository.save(mapping);
+            return alias;
+        }
+
+        Optional<UrlMapping> existing = repository.findAllByLongUrl(url).stream()
+                .filter(mapping -> !mapping.isExpired())
+                .findFirst();
+        if (existing.isPresent()) {
+            return existing.get().getShortCode();
+        }
+
+        UrlMapping mapping = new UrlMapping(url);
+        mapping.setExpiresAt(expiresAt);
+        mapping = repository.save(mapping);
+        mapping.setShortCode(Base62Encoder.encode(mapping.getId()));
+        repository.save(mapping);
+        return mapping.getShortCode();
+    }
 
     // Resolve short URL to its original URL
     public String getLongUrl(String shortCode) {
