@@ -47,6 +47,14 @@ class RateLimitTest {
     }
 
     @Test
+    void safetyStatusEndpointUsesDefaultRateLimitPolicy() {
+        RateLimitService service = new RateLimitService(properties(1, Duration.ofMinutes(1)));
+        MockHttpServletRequest request = request("GET", "/api/urls/abc123/status");
+
+        assertEquals(RateLimitPolicy.DEFAULT, service.determinePolicy(request));
+    }
+
+    @Test
     void tokensBecomeAvailableAfterTheRefillPeriod() throws InterruptedException {
         RateLimitProperties properties = properties(1, Duration.ofSeconds(1));
         RateLimitService service = new RateLimitService(properties);

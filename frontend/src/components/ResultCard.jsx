@@ -23,17 +23,33 @@ export default function ResultCard({ result, resultData, onCreateAnother }) {
   };
 
   const shortCode = result.split('/').pop();
+  const status = resultData?.status || 'SAFE';
 
   return (
     <div className="result-card">
       <div className="result-header">
-        <div className="result-badge">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <polyline points="20 6 9 17 4 12" />
-          </svg>
-          Your short link is ready
+        <div className={`result-badge result-badge-${status.toLowerCase()}`}>
+          {status === 'SAFE' && (
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="20 6 9 17 4 12" />
+            </svg>
+          )}
+          {status === 'SAFE' ? 'Your short link is ready'
+            : status === 'PENDING' ? 'Security verification in progress'
+              : 'Destination flagged as unsafe'}
         </div>
       </div>
+
+      {status === 'PENDING' && (
+        <p className="result-safety-message" role="status">
+          Security verification in progress. This link will start working shortly.
+        </p>
+      )}
+      {status === 'BLOCKED' && (
+        <p className="result-safety-message result-safety-blocked" role="alert">
+          This destination was flagged as unsafe.
+        </p>
+      )}
 
       <div className="result-url-display">
         <div className="result-url-text">
@@ -55,10 +71,12 @@ export default function ResultCard({ result, resultData, onCreateAnother }) {
               </>
             )}
           </button>
-          <a href={result} target="_blank" rel="noopener noreferrer" className="btn-result-action btn-result-open">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" /><polyline points="15 3 21 3 21 9" /><line x1="10" y1="14" x2="21" y2="3" /></svg>
-            Open
-          </a>
+          {status !== 'BLOCKED' && (
+            <a href={result} target="_blank" rel="noopener noreferrer" className="btn-result-action btn-result-open">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" /><polyline points="15 3 21 3 21 9" /><line x1="10" y1="14" x2="21" y2="3" /></svg>
+              Open
+            </a>
+          )}
         </div>
       </div>
 

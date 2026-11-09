@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import ResultCard from '../ResultCard';
 
 export default function HeroSection() {
@@ -13,6 +13,58 @@ export default function HeroSection() {
   const [resultData, setResultData] = useState(null);
 
   const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8080';
+
+  useEffect(() => {
+    if (resultData?.status !== 'PENDING' || !resultData.shortCode) {
+      return undefined;
+    }
+
+    let active = true;
+    let timeoutId;
+    const controller = new AbortController();
+    const startedAt = Date.now();
+    const stopTimeoutId = setTimeout(() => {
+      active = false;
+      clearTimeout(timeoutId);
+      controller.abort();
+    }, 60_000);
+
+    const pollStatus = async () => {
+      if (!active || Date.now() - startedAt >= 60_000) {
+        return;
+      }
+
+      try {
+        const response = await fetch(
+          `${API_BASE}/api/urls/${encodeURIComponent(resultData.shortCode)}/status`,
+          { signal: controller.signal }
+        );
+        if (response.ok) {
+          const data = await response.json();
+          if (data.status === 'SAFE' || data.status === 'BLOCKED') {
+            setResultData((current) => current?.shortCode === resultData.shortCode
+              ? { ...current, status: data.status }
+              : current);
+            return;
+          }
+        }
+      } catch {
+        // Keep polling until the safety result is available or the polling window ends.
+      }
+
+      if (active && Date.now() - startedAt < 60_000) {
+        timeoutId = setTimeout(pollStatus, 3500);
+      }
+    };
+
+    timeoutId = setTimeout(pollStatus, 3500);
+    return () => {
+      active = false;
+      clearTimeout(timeoutId);
+      clearTimeout(stopTimeoutId);
+      controller.abort();
+    };
+  }, [API_BASE, resultData?.shortCode, resultData?.status]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -188,15 +240,14 @@ export default function HeroSection() {
         />
       )}
 
-      <aside className="link-security-notice" aria-labelledby="link-security-title">
+      <div className="link-security-note" role="note">
         <svg
-          className="link-security-icon"
-          width="20"
-          height="20"
+          width="16"
+          height="16"
           viewBox="0 0 24 24"
           fill="none"
           stroke="currentColor"
-          strokeWidth="1.7"
+          strokeWidth="1.8"
           strokeLinecap="round"
           strokeLinejoin="round"
           aria-hidden="true"
@@ -204,15 +255,11 @@ export default function HeroSection() {
           <path d="M12 22s8-4 8-11V5l-8-3-8 3v6c0 7 8 11 8 11Z" />
           <path d="m9 12 2 2 4-4" />
         </svg>
-        <div className="link-security-copy">
-          <h2 id="link-security-title">Link Security</h2>
-          <p>
-            To help prevent malicious links, URLs submitted for shortening may be checked using Google Safe Browsing.
-            The submitted URL is shared with Google for security screening.
-          </p>
-          <p className="link-security-attribution">Powered by Google Safe Browsing.</p>
-        </div>
-      </aside>
+        <p>
+          Links are checked with Google Safe Browsing to keep malicious URLs out.
+          Submitted URLs are shared with Google for this check.
+        </p>
+      </div>
     </section>
   );
 }

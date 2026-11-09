@@ -19,6 +19,7 @@ public class ScheduledCleanupService {
     @Scheduled(cron = "${cleanup.expired.cron:0 0 * * * *}")
     public void cleanupExpired() {
         int count = urlService.deleteExpiredLinks();
-        logger.info("Deleted {} expired links", count);
+        int stuckCount = urlService.deleteStuckPendingLinks();
+        logger.info("Deleted {} expired links and {} stuck pending links", count, stuckCount);
     }
 }

@@ -23,6 +23,13 @@ public class UrlMapping {
     @Column(name = "expires_at")
     private LocalDateTime expiresAt;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "safe_status", nullable = false, length = 10)
+    private SafeStatus safeStatus;
+
+    @Column(name = "safe_checked_at")
+    private LocalDateTime safeCheckedAt;
+
     // Constructors
     public UrlMapping() {
     }
@@ -56,4 +63,10 @@ public class UrlMapping {
 
     public LocalDateTime getExpiresAt() { return expiresAt; }
     public void setExpiresAt(LocalDateTime expiresAt) { this.expiresAt = expiresAt; }
+
+    public SafeStatus getSafeStatus() { return safeStatus; }
+    public void setSafeStatus(SafeStatus safeStatus) { this.safeStatus = safeStatus; }
+
+    public LocalDateTime getSafeCheckedAt() { return safeCheckedAt; }
+    public void setSafeCheckedAt(LocalDateTime safeCheckedAt) { this.safeCheckedAt = safeCheckedAt; }
 }

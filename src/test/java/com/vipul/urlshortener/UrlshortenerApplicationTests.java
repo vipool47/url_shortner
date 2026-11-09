@@ -10,7 +10,10 @@ import com.vipul.urlshortener.service.UrlThreatChecker;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 
-@SpringBootTest(properties = "bitshort.url-safety.safe-browsing.api-key=test-api-key")
+@SpringBootTest(properties = {
+        "bitshort.url-safety.safe-browsing.api-key=test-api-key",
+        "spring.jpa.hibernate.ddl-auto=none"
+})
 class UrlshortenerApplicationTests {
 
     @Autowired

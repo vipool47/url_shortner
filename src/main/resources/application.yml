@@ -1,10 +1,22 @@
+spring:
+  jpa:
+    hibernate:
+      ddl-auto: validate
+
 bitshort:
   url-safety:
     enabled: ${BITSHORT_URL_SAFETY_ENABLED:true}
     fail-closed: ${BITSHORT_URL_SAFETY_FAIL_CLOSED:true}
     max-url-length: ${BITSHORT_MAX_URL_LENGTH:8192}
     public-short-link-hostname: ${BITSHORT_SHORT_LINK_HOSTNAME:}
+    inline-budget: ${BITSHORT_URL_SAFETY_INLINE_BUDGET:1s}
+    safe-verdict-freshness: ${BITSHORT_URL_SAFETY_VERDICT_FRESHNESS:24h}
+    safe-verdict-ttl: ${BITSHORT_URL_SAFETY_VERDICT_TTL:1h}
+    verification:
+      delay-ms: ${BITSHORT_URL_SAFETY_VERIFICATION_DELAY_MS:10000}
+      batch-size: ${BITSHORT_URL_SAFETY_VERIFICATION_BATCH_SIZE:25}
+      max-pending-age: ${BITSHORT_URL_SAFETY_MAX_PENDING_AGE:24h}
     safe-browsing:
       api-key: ${SAFE_BROWSING_API_KEY:}
-      connect-timeout: ${SAFE_BROWSING_CONNECT_TIMEOUT:2s}
-      response-timeout: ${SAFE_BROWSING_RESPONSE_TIMEOUT:4s}
+      connect-timeout: ${SAFE_BROWSING_CONNECT_TIMEOUT:1s}
+      response-timeout: ${SAFE_BROWSING_RESPONSE_TIMEOUT:1500ms}

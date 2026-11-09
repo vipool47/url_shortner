@@ -5,12 +5,28 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.context.annotation.Configuration;
 
+import java.time.Duration;
+
 import static org.junit.jupiter.api.Assertions.*;
 
 class UrlSafetyPropertiesTest {
 
     private final ApplicationContextRunner contextRunner = new ApplicationContextRunner()
             .withUserConfiguration(TestConfiguration.class);
+
+    @Test
+    void newSafetySettingsHaveSensibleDefaults() {
+        UrlSafetyProperties properties = new UrlSafetyProperties();
+
+        assertEquals(Duration.ofSeconds(1), properties.getInlineBudget());
+        assertEquals(Duration.ofHours(24), properties.getSafeVerdictFreshness());
+        assertEquals(Duration.ofHours(1), properties.getSafeVerdictTtl());
+        assertEquals(Duration.ofSeconds(1), properties.getSafeBrowsing().getConnectTimeout());
+        assertEquals(Duration.ofMillis(1500), properties.getSafeBrowsing().getResponseTimeout());
+        assertEquals(10_000, properties.getVerification().getDelayMs());
+        assertEquals(25, properties.getVerification().getBatchSize());
+        assertEquals(Duration.ofHours(24), properties.getVerification().getMaxPendingAge());
+    }
 
     @Test
     void missingOrBlankKeyFailsStartupWhenScreeningIsEnabled() {

@@ -34,6 +34,25 @@ class ResilientUrlThreatCheckerTest {
     }
 
     @Test
+    void normalizesOnlySchemeHostAndFragmentInCacheKey() {
+        String original = "HTTPS://Safe.Example/path?query=Value#first";
+
+        checker.check(original);
+        checker.check("https://safe.example/path?query=Value#second");
+
+        verify(delegate, times(1)).check(original);
+    }
+
+    @Test
+    void doesNotNormalizePathOrQueryInCacheKey() {
+        checker.check("https://safe.example/Path?query=Value");
+        checker.check("https://safe.example/path?query=value");
+
+        verify(delegate, times(1)).check("https://safe.example/Path?query=Value");
+        verify(delegate, times(1)).check("https://safe.example/path?query=value");
+    }
+
+    @Test
     void unsafeVerdictIsPropagatedAndNotCached() {
         String url = "https://unsafe.example";
         UnsafeDestinationException unsafe = new UnsafeDestinationException();

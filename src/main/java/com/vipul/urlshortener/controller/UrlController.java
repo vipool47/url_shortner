@@ -3,13 +3,16 @@ package com.vipul.urlshortener.controller;
 import com.vipul.urlshortener.dto.ErrorResponse;
 import com.vipul.urlshortener.dto.UrlRequest;
 import com.vipul.urlshortener.dto.UrlResponse;
+import com.vipul.urlshortener.dto.UrlStatusResponse;
 import com.vipul.urlshortener.entity.UrlMapping;
 import com.vipul.urlshortener.exception.InvalidExpiryException;
+import com.vipul.urlshortener.exception.LinkBlockedException;
 import com.vipul.urlshortener.exception.LinkExpiredException;
-import com.vipul.urlshortener.exception.ThreatLookupUnavailableException;
+import com.vipul.urlshortener.exception.LinkPendingException;
 import com.vipul.urlshortener.service.UrlServiceImpl;
 import com.vipul.urlshortener.util.ExpiryUtil;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
@@ -39,7 +42,7 @@ public class UrlController {
                         ));
             }
 
-            String shortCode = service.shortenUrl(
+            UrlMapping mapping = service.shortenUrlWithStatus(
                     request.getLongUrl(),
                     request.getCustomCode(),
                     request.getExpiryTimeMinutes(),
@@ -47,6 +50,7 @@ public class UrlController {
                     request.getExpiryTimeDays(),
                     request.getExpiresAtTimestamp()
             );
+            String shortCode = mapping.getShortCode();
 
             String shortUrl = ServletUriComponentsBuilder
                     .fromCurrentContextPath()
@@ -54,12 +58,11 @@ public class UrlController {
                     .path(shortCode)
                     .toUriString();
 
-            UrlMapping mapping = service.findByShortCode(shortCode).orElseThrow();
             String expiresAt = ExpiryUtil.formatDateTime(mapping.getExpiresAt());
             String expiryIn = mapping.getExpiresAt() != null ? ExpiryUtil.getTimeUntilExpiry(mapping.getExpiresAt()) : null;
 
             return ResponseEntity.ok(
-                    new UrlResponse(shortUrl, shortCode, expiresAt, expiryIn)
+                    new UrlResponse(shortUrl, shortCode, expiresAt, expiryIn, mapping.getSafeStatus().name())
             );
 
         } catch (InvalidExpiryException e) {
@@ -68,14 +71,6 @@ public class UrlController {
                     .body(new ErrorResponse(
                             "INVALID_EXPIRY",
                             e.getMessage()
-                    ));
-
-        } catch (ThreatLookupUnavailableException e) {
-            return ResponseEntity
-                    .status(HttpStatus.SERVICE_UNAVAILABLE)
-                    .body(new ErrorResponse(
-                            "URL_SAFETY_UNAVAILABLE",
-                            "URL safety screening is temporarily unavailable"
                     ));
 
         } catch (IllegalArgumentException e) {
@@ -98,8 +93,16 @@ public class UrlController {
         }
     }
 
+    @GetMapping("/api/urls/{shortCode}/status")
+    public ResponseEntity<UrlStatusResponse> getUrlStatus(@PathVariable String shortCode) {
+        return service.findByShortCode(shortCode)
+                .filter(mapping -> !mapping.isExpired())
+                .map(mapping -> ResponseEntity.ok(new UrlStatusResponse(mapping.getSafeStatus().name())))
+                .orElseGet(() -> ResponseEntity.notFound().build());
+    }
+
     @GetMapping("/{shortCode:[a-zA-Z0-9]+}")
-    public ResponseEntity<Void> redirect(@PathVariable String shortCode) {
+    public ResponseEntity<?> redirect(@PathVariable String shortCode) {
 
         try {
 
@@ -112,6 +115,17 @@ public class UrlController {
 
         } catch (LinkExpiredException ex) {
             return ResponseEntity.notFound().build();
+
+        } catch (LinkBlockedException ex) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .contentType(MediaType.TEXT_PLAIN)
+                    .body("This link was blocked because its destination was flagged as unsafe.");
+
+        } catch (LinkPendingException ex) {
+            return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                    .header("Retry-After", "30")
+                    .contentType(MediaType.TEXT_PLAIN)
+                    .body("This link is still being safety-checked. Please try again shortly.");
 
         } catch (RuntimeException ex) {
 

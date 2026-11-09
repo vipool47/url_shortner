@@ -18,12 +18,18 @@ export default function Navbar({ onNavigate }) {
   return (
     <nav className="navbar">
       <div className="navbar-inner">
-        <a className="navbar-logo" href="/" aria-label="BitShort home" onClick={(e) => { e.preventDefault(); handleNav('home'); }}>
-          <svg className="logo-mark" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-            <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
-            <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+        <a className="navbar-logo" href="/" aria-label="Bitshort home" onClick={(e) => { e.preventDefault(); handleNav('home'); }}>
+          <svg className="logo-mark" viewBox="0 0 64 64" aria-hidden="true">
+            <rect width="64" height="64" rx="15" fill="#111111" />
+            <g fill="none" stroke="#ffffff" strokeWidth="6" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 15V49" />
+              <path d="M21 15H33.5a8.5 8.5 0 0 1 0 17H21" />
+              <path d="M21 32H36a8.5 8.5 0 0 1 0 17H21" />
+            </g>
           </svg>
-          <span className="logo-bit">Bit</span><span className="logo-short">Short</span>
+          <span className="logo-text">
+            <span className="logo-bit">Bit</span><span className="logo-short">short</span>
+          </span>
         </a>
 
         <button className="navbar-toggle" onClick={() => setMobileOpen(!mobileOpen)} aria-label="Toggle navigation" aria-expanded={mobileOpen}>
