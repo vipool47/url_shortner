@@ -4,7 +4,10 @@ import jakarta.persistence.*;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "url_mapping")
+@Table(
+        name = "url_mapping",
+        indexes = @Index(name = "idx_url_mapping_expires_at", columnList = "expires_at")
+)
 public class UrlMapping {
 
     @Id
